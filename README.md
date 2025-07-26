@@ -4,7 +4,7 @@ For the past two years, I’ve had the privilege of guiding brilliant young scho
 
 University admissions, especially at elite institutions, are a high-stakes puzzle. Top grades alone aren’t enough. A winning application requires the right combination of academic excellence, compelling essays, standout recommendations, and an understanding of each school’s acceptance rates. Yet, despite these known factors, the process remains unpredictable—an opaque system where even stellar applicants sometimes face rejection.
 
-I built a linear regression model to decode the patterns behind graduate school admissions. By analyzing historical data—GRE scores, GPAs, research experience, and more—this model wouldn’t just guess outcomes; it would reveal the quantifiable thresholds that separate acceptance from rejection.
+I built a linear regression model to decode the patterns behind graduate school admissions. By analyzing historical data—GRE scores, GPAs, research experience, and more.
 
 # Public API Url
 I deployed the application on Render and this is the Public [URL](https://am-i-getting-into-uni.onrender.com/)
