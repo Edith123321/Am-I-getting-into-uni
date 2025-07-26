@@ -12,3 +12,4 @@ seaborn==0.13.2
 matplotlib==3.9.2
 ipykernel==6.24.0
 flask-restx>=1.0.0
+flasgger==0.9.5
