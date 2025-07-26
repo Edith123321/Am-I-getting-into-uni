@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import joblib
-import pandas as pd
 import numpy as np
 from pathlib import Path
 import os
@@ -28,6 +27,7 @@ except Exception as e:
 def validate_input(data):
     """
     Validate incoming user data for expected range and completeness.
+    Returns cleaned and typed data or raises ValueError.
     """
     expected_ranges = {
         'gre_score': (290, 340),
@@ -47,13 +47,14 @@ def validate_input(data):
         if value is None:
             errors.append(f"Missing field: {field}")
             continue
+
         try:
             if field in ['sop', 'lor', 'cgpa']:
                 value = float(value)
             else:
                 value = int(value)
         except ValueError:
-            errors.append(f"Invalid value for {field}: must be numeric")
+            errors.append(f"{field} must be numeric.")
             continue
 
         if not (min_val <= value <= max_val):
@@ -82,8 +83,9 @@ def generate_recommendations(user_data, prediction):
     if not user_data['research'] and prediction < 0.7:
         tips.append("Gain research experience to strengthen your profile.")
 
-  
     return tips if tips else ["Your profile looks strong! Focus on essays and application quality."]
+
+# === Root Endpoint: GET /
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({
@@ -91,14 +93,16 @@ def home():
         'status': 'OK'
     })
 
-# === Endpoint: POST /predict ===
+# === Prediction Endpoint: POST /predict ===
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        # Get JSON
+        # Read incoming JSON
         raw_data = request.get_json(force=True)
         if not raw_data:
             return jsonify({'success': False, 'error': 'Empty request body'}), 400
+
+        print("📥 Incoming JSON:", raw_data)  # Optional: Debug print
 
         # Validate and prepare input
         user_data = validate_input(raw_data)
@@ -116,7 +120,7 @@ def predict():
         input_scaled = scaler.transform([input_values])
         prediction = model.predict(input_scaled)[0]
 
-        # Recommend
+        # Generate recommendation tips
         recommendations = generate_recommendations(user_data, prediction)
 
         return jsonify({
@@ -128,7 +132,7 @@ def predict():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
-# === Main Entry ===
+# === Entry Point ===
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
