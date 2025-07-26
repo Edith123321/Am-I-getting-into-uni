@@ -82,7 +82,14 @@ def generate_recommendations(user_data, prediction):
     if not user_data['research'] and prediction < 0.7:
         tips.append("Gain research experience to strengthen your profile.")
 
+  
     return tips if tips else ["Your profile looks strong! Focus on essays and application quality."]
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({
+        'message': '🎓 University Admission Predictor API is running.',
+        'status': 'OK'
+    })
 
 # === Endpoint: POST /predict ===
 @app.route('/predict', methods=['POST'])
