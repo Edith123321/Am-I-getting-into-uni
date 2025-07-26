@@ -1,12 +1,22 @@
+#!/usr/bin/env python3
+
 import pandas as pd
 import joblib
 import os
 import numpy as np
-from sklearn.ensemble import GradientBoostingRegressor
+import sklearn
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.ensemble import GradientBoostingRegressor
 from pathlib import Path
+import platform
+
+# Print environment info
+print("Python version:", platform.python_version())
+print("Pandas version:", pd.__version__)
+print("NumPy version:", np.__version__)
+print("scikit-learn version:", sklearn.__version__)
 
 def validate_input_data(X):
     """Standalone validation function"""
@@ -19,12 +29,12 @@ def validate_input_data(X):
         'CGPA': (6.8, 9.92),
         'Research': (0, 1)
     }
-    
+
     X.columns = X.columns.str.strip()
     missing = set(expected_ranges) - set(X.columns)
     if missing:
         raise ValueError(f"Missing columns: {missing}")
-        
+
     for col, (min_val, max_val) in expected_ranges.items():
         if not X[col].between(min_val, max_val).all():
             bad = X[~X[col].between(min_val, max_val)][col]
@@ -35,17 +45,17 @@ def validate_input_data(X):
 current_dir = Path(__file__).parent
 csv_path = current_dir / 'Admission_Prediction.csv'
 model_path = current_dir.parent / "backend" / "models" / "university_admission_predictor.pkl"
-model_path.parent.mkdir(exist_ok=True)
+model_path.parent.mkdir(parents=True, exist_ok=True)
 
 # Load and clean data
-print("Loading data...")
+print("\nLoading data...")
 data = pd.read_csv(csv_path)
 data.columns = data.columns.str.strip()
 
 # Validate data
 validate_input_data(data.drop(['Serial No.', 'Chance of Admit'], axis=1))
 if not data['Chance of Admit'].between(0, 1).all():
-    raise ValueError("Target must be 0-1")
+    raise ValueError("Target 'Chance of Admit' must be in the range [0, 1]")
 
 # Prepare features/target
 X = data.drop(['Serial No.', 'Chance of Admit'], axis=1)
@@ -81,7 +91,7 @@ joblib.dump({
     'scaler': scaler,
     'feature_names': X.columns.tolist()
 }, model_path)
-print(f"\nModel saved to {model_path}")
+print(f"\n✅ Model saved to {model_path}")
 
 # Test cases
 test_cases = [
@@ -90,7 +100,7 @@ test_cases = [
     [320, 110, 3, 3.5, 4.0, 8.5, 1]
 ]
 
-print("\nTest Predictions:")
+print("\n🔍 Test Predictions:")
 for case in test_cases:
     case_df = pd.DataFrame([case], columns=X.columns)
     case_scaled = scaler.transform(case_df)
