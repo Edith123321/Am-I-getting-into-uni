@@ -4,9 +4,123 @@ import joblib
 import numpy as np
 from pathlib import Path
 import os
+from flasgger import Swagger
 
 app = Flask(__name__)
 CORS(app)
+
+# ===== Swagger Configuration =====
+swagger_config = {
+    'title': 'University Admission Predictor API',
+    'uiversion': 3,
+    'description': 'Predicts graduate school admission chances using machine learning',
+    'termsOfService': 'https://am-i-getting-into-uni.onrender.com/terms',
+    'version': '1.0',
+    'specs_route': '/docs/',
+    'template': {
+        'info': {
+            'contact': {'email': 'support@unipredictor.com'},
+            'license': {'name': 'MIT'}
+        },
+        'definitions': {
+            'PredictionInput': {
+                'type': 'object',
+                'required': [
+                    'gre_score',
+                    'toefl_score',
+                    'university_rating',
+                    'sop',
+                    'lor',
+                    'cgpa',
+                    'research'
+                ],
+                'properties': {
+                    'gre_score': {
+                        'type': 'integer',
+                        'minimum': 290,
+                        'maximum': 340,
+                        'example': 320
+                    },
+                    'toefl_score': {
+                        'type': 'integer',
+                        'minimum': 92,
+                        'maximum': 120,
+                        'example': 110
+                    },
+                    'university_rating': {
+                        'type': 'integer',
+                        'minimum': 1,
+                        'maximum': 5,
+                        'example': 3
+                    },
+                    'sop': {
+                        'type': 'number',
+                        'minimum': 1.0,
+                        'maximum': 5.0,
+                        'example': 4.5
+                    },
+                    'lor': {
+                        'type': 'number',
+                        'minimum': 1.0,
+                        'maximum': 5.0,
+                        'example': 4.0
+                    },
+                    'cgpa': {
+                        'type': 'number',
+                        'minimum': 6.8,
+                        'maximum': 9.92,
+                        'example': 8.5
+                    },
+                    'research': {
+                        'type': 'integer',
+                        'minimum': 0,
+                        'maximum': 1,
+                        'example': 1
+                    }
+                }
+            },
+            'PredictionResponse': {
+                'type': 'object',
+                'properties': {
+                    'success': {
+                        'type': 'boolean',
+                        'example': True
+                    },
+                    'prediction': {
+                        'type': 'number',
+                        'example': 0.85
+                    },
+                    'recommendations': {
+                        'type': 'array',
+                        'items': {
+                            'type': 'string'
+                        },
+                        'example': [
+                            "Increase GRE by 10 points",
+                            "Gain research experience"
+                        ]
+                    }
+                }
+            },
+            'ErrorResponse': {
+                'type': 'object',
+                'properties': {
+                    'success': {
+                        'type': 'boolean',
+                        'example': False
+                    },
+                    'error': {
+                        'type': 'string',
+                        'example': "Missing field: gre_score"
+                    }
+                }
+            }
+        }
+    }
+}
+
+app.config['SWAGGER'] = swagger_config
+swagger = Swagger(app)
 
 # === Paths ===
 BASE_DIR = Path(__file__).parent
@@ -88,6 +202,23 @@ def generate_recommendations(user_data, prediction):
 # === Root Endpoint: GET /
 @app.route('/', methods=['GET'])
 def home():
+    """
+    API Health Check
+    ---
+    tags:
+      - Health
+    responses:
+      200:
+        description: API status
+        schema:
+          properties:
+            message:
+              type: string
+              example: "🎓 University Admission Predictor API is running."
+            status:
+              type: string
+              example: "OK"
+    """
     return jsonify({
         'message': '🎓 University Admission Predictor API is running.',
         'status': 'OK'
@@ -96,13 +227,39 @@ def home():
 # === Prediction Endpoint: POST /predict ===
 @app.route('/predict', methods=['POST'])
 def predict():
+    """
+    Predict Admission Probability
+    ---
+    tags:
+      - Predictions
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        description: Applicant data
+        schema:
+          $ref: '#/definitions/PredictionInput'
+    responses:
+      200:
+        description: Prediction result
+        schema:
+          $ref: '#/definitions/PredictionResponse'
+      400:
+        description: Invalid input
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+    """
     try:
         # Read incoming JSON
         raw_data = request.get_json(force=True)
         if not raw_data:
             return jsonify({'success': False, 'error': 'Empty request body'}), 400
 
-        print("📥 Incoming JSON:", raw_data)  # Optional: Debug print
+        print("📥 Incoming JSON:", raw_data)
 
         # Validate and prepare input
         user_data = validate_input(raw_data)
