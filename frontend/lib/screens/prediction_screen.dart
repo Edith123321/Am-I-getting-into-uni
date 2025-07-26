@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-import 'package:flutter/animation.dart';
 
 class PredictionScreen extends StatefulWidget {
   const PredictionScreen({super.key});
