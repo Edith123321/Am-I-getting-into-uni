@@ -4,52 +4,71 @@ import 'dart:io';
 import 'dart:async';
 
 class ApiService {
-  // Replace with your Render backend URL
   static const String _baseUrl = 'https://am-i-getting-into-uni.onrender.com';
 
   static Future<Map<String, dynamic>> predictAdmission(Map<String, dynamic> data) async {
-  try {
-    final body = json.encode({
-      'gre_score': int.parse(data['gre_score'] ?? '0'),
-      'toefl_score': int.parse(data['toefl_score'] ?? '0'),
-      'university_rating': int.parse(data['university_rating'] ?? '0'),
-      'sop': double.parse(data['sop'] ?? '0'),
-      'lor': double.parse(data['lor'] ?? '0'),
-      'cgpa': double.parse(data['cgpa'] ?? '0'),
-      'research': int.parse(data['research'] ?? '0'),
-    });
+    try {
+      // Safely parse input values with fallbacks
+      final body = json.encode({
+        'gre_score': _parseInt(data['gre_score']),
+        'toefl_score': _parseInt(data['toefl_score']),
+        'university_rating': _parseInt(data['university_rating']),
+        'sop': _parseDouble(data['sop']),
+        'lor': _parseDouble(data['lor']),
+        'cgpa': _parseDouble(data['cgpa']),
+        'research': _parseInt(data['research']), // Changed to int since research is 0/1
+      });
 
-    final response = await http
-        .post(
-          Uri.parse('$_baseUrl/predict'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: body,
-        )
-        .timeout(const Duration(seconds: 15));
+      final response = await http.post(
+        Uri.parse('$_baseUrl/predict'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: body,
+      ).timeout(const Duration(seconds: 15));
 
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      final error = json.decode(response.body);
-      throw HttpException(
-        error['error'] ?? 'Server error: ${response.statusCode}',
-        uri: Uri.parse('$_baseUrl/predict'),
-      );
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body);
+        // Ensure prediction is properly typed
+        if (result['prediction'] != null) {
+          result['prediction'] = (result['prediction'] as num).toDouble();
+        }
+        return result;
+      } else {
+        final error = json.decode(response.body);
+        throw HttpException(
+          error['error']?.toString() ?? 'Server error: ${response.statusCode}',
+          uri: Uri.parse('$_baseUrl/predict'),
+        );
+      }
+    } on SocketException {
+      throw Exception('No internet connection. Please check your network.');
+    } on TimeoutException {
+      throw Exception('Request timed out. The server might be busy. Please try again.');
+    } on FormatException {
+      throw Exception('Invalid response format from server.');
+    } on HttpException catch (e) {
+      throw Exception(e.message);
+    } catch (e) {
+      throw Exception('Failed to get prediction: ${e.toString()}');
     }
-  } on SocketException {
-    throw Exception('No internet connection.');
-  } on TimeoutException {
-    throw Exception('Request timed out. Try again.');
-  } on FormatException {
-    throw Exception('Bad response format.');
-  } on HttpException catch (e) {
-    throw Exception(e.message);
-  } catch (e) {
-    throw Exception('Prediction failed: $e');
   }
-}
 
+  // Helper methods for safe parsing
+  static int _parseInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? 0;
+    if (value is double) return value.toInt();
+    return 0;
+  }
+
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    if (value is int) return value.toDouble();
+    return 0.0;
+  }
 }
