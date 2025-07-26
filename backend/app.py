@@ -1,126 +1,58 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_restx import Api, Resource, fields
 import joblib
 import numpy as np
 from pathlib import Path
 import os
-from flasgger import Swagger
 
 app = Flask(__name__)
 CORS(app)
 
-# ===== Swagger Configuration =====
-swagger_config = {
-    'title': 'University Admission Predictor API',
-    'uiversion': 3,
-    'description': 'Predicts graduate school admission chances using machine learning',
-    'termsOfService': 'https://am-i-getting-into-uni.onrender.com/terms',
-    'version': '1.0',
-    'specs_route': '/docs/',
-    'template': {
-        'info': {
-            'contact': {'email': 'support@unipredictor.com'},
-            'license': {'name': 'MIT'}
-        },
-        'definitions': {
-            'PredictionInput': {
-                'type': 'object',
-                'required': [
-                    'gre_score',
-                    'toefl_score',
-                    'university_rating',
-                    'sop',
-                    'lor',
-                    'cgpa',
-                    'research'
-                ],
-                'properties': {
-                    'gre_score': {
-                        'type': 'integer',
-                        'minimum': 290,
-                        'maximum': 340,
-                        'example': 320
-                    },
-                    'toefl_score': {
-                        'type': 'integer',
-                        'minimum': 92,
-                        'maximum': 120,
-                        'example': 110
-                    },
-                    'university_rating': {
-                        'type': 'integer',
-                        'minimum': 1,
-                        'maximum': 5,
-                        'example': 3
-                    },
-                    'sop': {
-                        'type': 'number',
-                        'minimum': 1.0,
-                        'maximum': 5.0,
-                        'example': 4.5
-                    },
-                    'lor': {
-                        'type': 'number',
-                        'minimum': 1.0,
-                        'maximum': 5.0,
-                        'example': 4.0
-                    },
-                    'cgpa': {
-                        'type': 'number',
-                        'minimum': 6.8,
-                        'maximum': 9.92,
-                        'example': 8.5
-                    },
-                    'research': {
-                        'type': 'integer',
-                        'minimum': 0,
-                        'maximum': 1,
-                        'example': 1
-                    }
-                }
-            },
-            'PredictionResponse': {
-                'type': 'object',
-                'properties': {
-                    'success': {
-                        'type': 'boolean',
-                        'example': True
-                    },
-                    'prediction': {
-                        'type': 'number',
-                        'example': 0.85
-                    },
-                    'recommendations': {
-                        'type': 'array',
-                        'items': {
-                            'type': 'string'
-                        },
-                        'example': [
-                            "Increase GRE by 10 points",
-                            "Gain research experience"
-                        ]
-                    }
-                }
-            },
-            'ErrorResponse': {
-                'type': 'object',
-                'properties': {
-                    'success': {
-                        'type': 'boolean',
-                        'example': False
-                    },
-                    'error': {
-                        'type': 'string',
-                        'example': "Missing field: gre_score"
-                    }
-                }
-            }
-        }
-    }
-}
+# ===== Flask-RESTx API Configuration =====
+api = Api(
+    app,
+    version='1.0',
+    title='University Admission Predictor API',
+    description='Predicts graduate school admission chances using machine learning',
+    doc='/docs/',
+    license='MIT',
+    license_url='https://opensource.org/licenses/MIT',
+    contact='support@unipredictor.com',
+    contact_url='https://am-i-getting-into-uni.onrender.com/terms'
+)
 
-app.config['SWAGGER'] = swagger_config
-swagger = Swagger(app)
+# Define models
+prediction_input = api.model('PredictionInput', {
+    'gre_score': fields.Integer(required=True, min=290, max=340, example=320,
+                               description='GRE Score (290-340)'),
+    'toefl_score': fields.Integer(required=True, min=92, max=120, example=110,
+                                 description='TOEFL Score (92-120)'),
+    'university_rating': fields.Integer(required=True, min=1, max=5, example=3,
+                                      description='University Rating (1-5)'),
+    'sop': fields.Float(required=True, min=1.0, max=5.0, example=4.5,
+                       description='Statement of Purpose strength (1.0-5.0)'),
+    'lor': fields.Float(required=True, min=1.0, max=5.0, example=4.0,
+                       description='Letter of Recommendation strength (1.0-5.0)'),
+    'cgpa': fields.Float(required=True, min=6.8, max=9.92, example=8.5,
+                        description='Undergraduate GPA (6.8-9.92)'),
+    'research': fields.Integer(required=True, min=0, max=1, example=1,
+                             description='Research experience (0=no, 1=yes)')
+})
+
+prediction_response = api.model('PredictionResponse', {
+    'success': fields.Boolean(example=True),
+    'prediction': fields.Float(example=0.85),
+    'recommendations': fields.List(fields.String, example=[
+        "Increase GRE by 10 points",
+        "Gain research experience"
+    ])
+})
+
+error_response = api.model('ErrorResponse', {
+    'success': fields.Boolean(example=False),
+    'error': fields.String(example="Missing field: gre_score")
+})
 
 # === Paths ===
 BASE_DIR = Path(__file__).parent
@@ -199,95 +131,58 @@ def generate_recommendations(user_data, prediction):
 
     return tips if tips else ["Your profile looks strong! Focus on essays and application quality."]
 
-# === Root Endpoint: GET /
-@app.route('/', methods=['GET'])
-def home():
-    """
-    API Health Check
-    ---
-    tags:
-      - Health
-    responses:
-      200:
-        description: API status
-        schema:
-          properties:
-            message:
-              type: string
-              example: "🎓 University Admission Predictor API is running."
-            status:
-              type: string
-              example: "OK"
-    """
-    return jsonify({
-        'message': '🎓 University Admission Predictor API is running.',
-        'status': 'OK'
-    })
+# === API Routes ===
+@api.route('/')
+class HealthCheck(Resource):
+    def get(self):
+        """API Health Check"""
+        return {
+            'message': '🎓 University Admission Predictor API is running.',
+            'status': 'OK'
+        }
 
-# === Prediction Endpoint: POST /predict ===
-@app.route('/predict', methods=['POST'])
-def predict():
-    """
-    Predict Admission Probability
-    ---
-    tags:
-      - Predictions
-    consumes:
-      - application/json
-    produces:
-      - application/json
-    parameters:
-      - in: body
-        name: body
-        required: true
-        description: Applicant data
-        schema:
-          $ref: '#/definitions/PredictionInput'
-    responses:
-      200:
-        description: Prediction result
-        schema:
-          $ref: '#/definitions/PredictionResponse'
-      400:
-        description: Invalid input
-        schema:
-          $ref: '#/definitions/ErrorResponse'
-    """
-    try:
-        # Read incoming JSON
-        raw_data = request.get_json(force=True)
-        if not raw_data:
-            return jsonify({'success': False, 'error': 'Empty request body'}), 400
+@api.route('/predict')
+class Predictor(Resource):
+    @api.expect(prediction_input)
+    @api.response(200, 'Success', prediction_response)
+    @api.response(400, 'Bad Request', error_response)
+    def post(self):
+        """Predict admission probability"""
+        try:
+            # Read incoming JSON
+            raw_data = request.get_json(force=True)
+            if not raw_data:
+                return {'success': False, 'error': 'Empty request body'}, 400
 
-        print("📥 Incoming JSON:", raw_data)
+            print("📥 Incoming JSON:", raw_data)
 
-        # Validate and prepare input
-        user_data = validate_input(raw_data)
-        input_values = [
-            user_data['gre_score'],
-            user_data['toefl_score'],
-            user_data['university_rating'],
-            user_data['sop'],
-            user_data['lor'],
-            user_data['cgpa'],
-            user_data['research']
-        ]
+            # Validate and prepare input
+            user_data = validate_input(raw_data)
+            input_values = [
+                user_data['gre_score'],
+                user_data['toefl_score'],
+                user_data['university_rating'],
+                user_data['sop'],
+                user_data['lor'],
+                user_data['cgpa'],
+                user_data['research']
+            ]
 
-        # Scale and predict
-        input_scaled = scaler.transform([input_values])
-        prediction = model.predict(input_scaled)[0]
+            # Scale and predict
+            input_scaled = scaler.transform([input_values])
+            prediction = model.predict(input_scaled)[0]
 
-        # Generate recommendation tips
-        recommendations = generate_recommendations(user_data, prediction)
+            # Generate recommendation tips
+            recommendations = generate_recommendations(user_data, prediction)
 
-        return jsonify({
-            'success': True,
-            'prediction': round(float(prediction), 4),
-            'recommendations': recommendations
-        })
+            return {
+                'success': True,
+                'prediction': round(float(prediction), 4),
+                'recommendations': recommendations
+            }
 
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
+        except Exception as e:
+            return {'success': False, 'error': str(e)}, 400
 
 # === Entry Point ===
 if __name__ == '__main__':
