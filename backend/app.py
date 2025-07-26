@@ -1,114 +1,119 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pandas as pd
 import joblib
+import pandas as pd
+import numpy as np
 from pathlib import Path
-import sys
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-# Setup paths
-BASE_DIR = Path(__file__).resolve().parent
+# Model paths
+BASE_DIR = Path(__file__).parent
 MODEL_PATH = BASE_DIR / 'models' / 'university_admission_predictor.pkl'
 
-# Add ML utilities to path
-sys.path.append(str(BASE_DIR.parent / 'ml_model'))
-from model_utils import DataValidator  # Ensure this exists in your ml_model directory
+def validate_input(data):
+    """Validate input ranges"""
+    expected_ranges = {
+        'gre_score': (290, 340),
+        'toefl_score': (92, 120),
+        'university_rating': (1, 5),
+        'sop': (1.0, 5.0),
+        'lor': (1.0, 5.0),
+        'cgpa': (6.8, 9.92),
+        'research': (0, 1)
+    }
+    
+    errors = []
+    for field, (min_val, max_val) in expected_ranges.items():
+        value = data.get(field)
+        if value is None:
+            errors.append(f"Missing {field}")
+        elif not (min_val <= value <= max_val):
+            errors.append(f"Invalid {field}: {value}. Must be {min_val}-{max_val}")
+    
+    if errors:
+        raise ValueError("; ".join(errors))
+    
+    return {
+        'gre_score': int(data['gre_score']),
+        'toefl_score': int(data['toefl_score']),
+        'university_rating': int(data['university_rating']),
+        'sop': float(data['sop']),
+        'lor': float(data['lor']),
+        'cgpa': float(data['cgpa']),
+        'research': int(data['research'])
+    }
 
 # Load model
 try:
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(f"Model file not found at: {MODEL_PATH}")
-    model = joblib.load(MODEL_PATH)
-    print(f"✅ Model loaded from: {MODEL_PATH}")
+    model_data = joblib.load(MODEL_PATH)
+    model = model_data['model']
+    scaler = model_data['scaler']
+    feature_names = model_data['feature_names']
+    print(f"✅ Model loaded successfully from {MODEL_PATH}")
 except Exception as e:
-    print(f"❌ Model initialization error: {str(e)}")
+    print(f"❌ Failed to load model: {str(e)}")
     raise
 
 def generate_recommendations(user_data, prediction):
-    """Generate personalized improvement suggestions based on input and result"""
+    """Generate improvement suggestions"""
     tips = []
-
-    # GRE
+    
     if user_data['gre_score'] < 320:
-        tips.append(f"Increase GRE by {320 - user_data['gre_score']}+ points (Current: {user_data['gre_score']})")
-
-    # TOEFL
+        tips.append(f"Increase GRE by {320 - user_data['gre_score']} points (current: {user_data['gre_score']})")
+    
     if user_data['toefl_score'] < 105:
-        tips.append(f"Improve TOEFL by {105 - user_data['toefl_score']}+ points (Current: {user_data['toefl_score']})")
-
-    # GPA
+        tips.append(f"Improve TOEFL by {105 - user_data['toefl_score']} points (current: {user_data['toefl_score']})")
+    
     if user_data['cgpa'] < 8.5:
-        target = max(8.5, user_data['cgpa'] + 0.5)
-        tips.append(f"Aim for {target:.1f}+ CGPA next term (Current: {user_data['cgpa']})")
+        tips.append(f"Aim for CGPA of 8.5+ (current: {user_data['cgpa']})")
+    
+    if not user_data['research'] and prediction < 0.7:
+        tips.append("Gain research experience to boost your chances")
+    
+    return tips if tips else ["Your profile looks strong! Focus on application essays."]
 
-    # Research
-    if user_data['research'] == 0 and prediction < 0.8:
-        tips.append("Gain research experience (1 project → +5% chance)")
-
-    # SOP
-    if user_data['sop'] < 4.0:
-        tips.append(f"Strengthen Statement of Purpose (Aim for 4.5+, Current: {user_data['sop']})")
-        tips.append("  - Highlight specific research interests")
-        tips.append("  - Connect to faculty work at your target school")
-
-    # LOR
-    if user_data['lor'] < 4.0:
-        tips.append(f"Secure stronger Letters of Recommendation (Aim for 4.5+, Current: {user_data['lor']})")
-        tips.append("  - Ask professors who know you well")
-        tips.append("  - Share your CV and academic goals with them")
-
-    return tips if tips else ["✅ Profile looks strong! Focus on interview preparation and application timelines."]
-
-@app.route('/predict', methods=['POST', 'GET'])
+@app.route('/predict', methods=['POST'])
 def predict():
-    if request.method == 'POST':
-        try:
-            raw_data = request.get_json() if request.is_json else request.form.to_dict()
-
-            # Parse and validate input
-            user_data = {
-                'gre_score': int(raw_data['gre_score']),
-                'toefl_score': int(raw_data['toefl_score']),
-                'university_rating': int(raw_data['university_rating']),
-                'sop': float(raw_data['sop']),
-                'lor': float(raw_data['lor']),
-                'cgpa': float(raw_data['cgpa']),
-                'research': int(raw_data['research']),
-            }
-
-            # Prepare input DataFrame
-            X = pd.DataFrame([[
-                user_data['gre_score'],
-                user_data['toefl_score'],
-                user_data['university_rating'],
-                user_data['sop'],
-                user_data['lor'],
-                user_data['cgpa'],
-                user_data['research']
-            ]], columns=['GRE Score', 'TOEFL Score', 'University Rating', 'SOP', 'LOR', 'CGPA', 'Research'])
-
-            # Make prediction
-            prediction = model.predict(X)[0]
-
-            # Generate suggestions
-            recommendations = generate_recommendations(user_data, prediction)
-
-            return jsonify({
-                'success': True,
-                'prediction': round(float(prediction), 4),
-                'recommendations': recommendations
-            })
-
-        except Exception as e:
-            return jsonify({
-                'success': False,
-                'error': f"Prediction failed: {str(e)}"
-            }), 400
-
-    # Fallback to default UI (optional)
-    return render_template('form.html')
+    try:
+        # Get and validate input
+        raw_data = request.get_json()
+        user_data = validate_input(raw_data)
+        
+        # Prepare input in correct order
+        input_values = [
+            user_data['gre_score'],
+            user_data['toefl_score'],
+            user_data['university_rating'],
+            user_data['sop'],
+            user_data['lor'],
+            user_data['cgpa'],
+            user_data['research']
+        ]
+        
+        # Scale features
+        input_scaled = scaler.transform([input_values])
+        
+        # Make prediction
+        prediction = model.predict(input_scaled)[0]
+        
+        # Generate recommendations
+        recommendations = generate_recommendations(user_data, prediction)
+        
+        return jsonify({
+            'success': True,
+            'prediction': float(prediction),
+            'recommendations': recommendations
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 400
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
