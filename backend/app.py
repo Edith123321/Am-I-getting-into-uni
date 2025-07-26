@@ -9,12 +9,26 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Model paths
+# === Paths ===
 BASE_DIR = Path(__file__).parent
 MODEL_PATH = BASE_DIR / 'models' / 'university_admission_predictor.pkl'
 
+# === Load Model ===
+try:
+    model_data = joblib.load(MODEL_PATH)
+    model = model_data['model']
+    scaler = model_data['scaler']
+    feature_names = model_data['feature_names']
+    print(f"✅ Model loaded from {MODEL_PATH}")
+except Exception as e:
+    print(f"❌ Failed to load model: {e}")
+    raise
+
+# === Helper: Validate Input ===
 def validate_input(data):
-    """Validate input ranges"""
+    """
+    Validate incoming user data for expected range and completeness.
+    """
     expected_ranges = {
         'gre_score': (290, 340),
         'toefl_score': (92, 120),
@@ -24,65 +38,63 @@ def validate_input(data):
         'cgpa': (6.8, 9.92),
         'research': (0, 1)
     }
-    
+
     errors = []
+    cleaned = {}
+
     for field, (min_val, max_val) in expected_ranges.items():
         value = data.get(field)
         if value is None:
-            errors.append(f"Missing {field}")
-        elif not (min_val <= value <= max_val):
-            errors.append(f"Invalid {field}: {value}. Must be {min_val}-{max_val}")
-    
+            errors.append(f"Missing field: {field}")
+            continue
+        try:
+            if field in ['sop', 'lor', 'cgpa']:
+                value = float(value)
+            else:
+                value = int(value)
+        except ValueError:
+            errors.append(f"Invalid value for {field}: must be numeric")
+            continue
+
+        if not (min_val <= value <= max_val):
+            errors.append(f"{field} must be between {min_val} and {max_val} (got {value})")
+
+        cleaned[field] = value
+
     if errors:
         raise ValueError("; ".join(errors))
-    
-    return {
-        'gre_score': int(data['gre_score']),
-        'toefl_score': int(data['toefl_score']),
-        'university_rating': int(data['university_rating']),
-        'sop': float(data['sop']),
-        'lor': float(data['lor']),
-        'cgpa': float(data['cgpa']),
-        'research': int(data['research'])
-    }
 
-# Load model
-try:
-    model_data = joblib.load(MODEL_PATH)
-    model = model_data['model']
-    scaler = model_data['scaler']
-    feature_names = model_data['feature_names']
-    print(f"✅ Model loaded successfully from {MODEL_PATH}")
-except Exception as e:
-    print(f"❌ Failed to load model: {str(e)}")
-    raise
+    return cleaned
 
+# === Helper: Recommendations ===
 def generate_recommendations(user_data, prediction):
-    """Generate improvement suggestions"""
+    """
+    Suggest ways to improve chances based on user input and prediction.
+    """
     tips = []
-    
-    if user_data['gre_score'] < 320:
-        tips.append(f"Increase GRE by {320 - user_data['gre_score']} points (current: {user_data['gre_score']})")
-    
-    if user_data['toefl_score'] < 105:
-        tips.append(f"Improve TOEFL by {105 - user_data['toefl_score']} points (current: {user_data['toefl_score']})")
-    
-    if user_data['cgpa'] < 8.5:
-        tips.append(f"Aim for CGPA of 8.5+ (current: {user_data['cgpa']})")
-    
-    if not user_data['research'] and prediction < 0.7:
-        tips.append("Gain research experience to boost your chances")
-    
-    return tips if tips else ["Your profile looks strong! Focus on application essays."]
 
+    if user_data['gre_score'] < 320:
+        tips.append(f"Increase GRE by {320 - user_data['gre_score']} points.")
+    if user_data['toefl_score'] < 105:
+        tips.append(f"Improve TOEFL by {105 - user_data['toefl_score']} points.")
+    if user_data['cgpa'] < 8.5:
+        tips.append("Target CGPA above 8.5.")
+    if not user_data['research'] and prediction < 0.7:
+        tips.append("Gain research experience to strengthen your profile.")
+
+    return tips if tips else ["Your profile looks strong! Focus on essays and application quality."]
+
+# === Endpoint: POST /predict ===
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        # Get and validate input
-        raw_data = request.get_json()
+        # Get JSON
+        raw_data = request.get_json(force=True)
+        if not raw_data:
+            return jsonify({'success': False, 'error': 'Empty request body'}), 400
+
+        # Validate and prepare input
         user_data = validate_input(raw_data)
-        
-        # Prepare input in correct order
         input_values = [
             user_data['gre_score'],
             user_data['toefl_score'],
@@ -92,28 +104,24 @@ def predict():
             user_data['cgpa'],
             user_data['research']
         ]
-        
-        # Scale features
+
+        # Scale and predict
         input_scaled = scaler.transform([input_values])
-        
-        # Make prediction
         prediction = model.predict(input_scaled)[0]
-        
-        # Generate recommendations
+
+        # Recommend
         recommendations = generate_recommendations(user_data, prediction)
-        
+
         return jsonify({
             'success': True,
-            'prediction': float(prediction),
+            'prediction': round(float(prediction), 4),
             'recommendations': recommendations
         })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 400
 
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+# === Main Entry ===
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
