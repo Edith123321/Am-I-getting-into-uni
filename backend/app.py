@@ -140,16 +140,18 @@ def generate_recommendations(user_data, prediction):
     return tips if tips else ["Your profile looks strong! Focus on essays"]
 
 # ===== API Endpoints =====
-@api.route('/')
-class HealthCheck(Resource):
-    @api.doc(description='API health check endpoint')
-    def get(self):
-        """Check API status"""
-        return {
-            'message': '🎓 University Admission Predictor API is running',
-            'status': 'OK',
-            'version': '1.0'
+@app.route('/')
+def home():
+    """Root endpoint with welcome message"""
+    return {
+        'message': '🎓 University Admission Predictor API is running',
+        'status': 'OK',
+        'version': '1.0',
+        'endpoints': {
+            'documentation': '/docs/',
+            'prediction': '/predict'
         }
+    }
 
 @api.route('/predict')
 class Predictor(Resource):
