@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from flask_cors import CORS
 from flask_restx import Api, Resource, fields
 import joblib
@@ -6,59 +6,80 @@ import numpy as np
 from pathlib import Path
 import os
 
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
-# ===== Flask-RESTx API Configuration =====
+# ===== API Configuration =====
 api = Api(
     app,
     version='1.0',
     title='University Admission Predictor API',
-    description='Predicts graduate school admission chances using machine learning',
+    description='Machine learning model to predict graduate school admission chances',
     doc='/docs/',
     license='MIT',
     license_url='https://opensource.org/licenses/MIT',
-    contact='support@unipredictor.com',
+    contact='e.githinji1@alustudent.com',
     contact_url='https://am-i-getting-into-uni.onrender.com/terms'
 )
 
-# Define models
+# ===== Data Models =====
 prediction_input = api.model('PredictionInput', {
-    'gre_score': fields.Integer(required=True, min=290, max=340, example=320,
-                               description='GRE Score (290-340)'),
-    'toefl_score': fields.Integer(required=True, min=92, max=120, example=110,
-                                 description='TOEFL Score (92-120)'),
-    'university_rating': fields.Integer(required=True, min=1, max=5, example=3,
-                                      description='University Rating (1-5)'),
-    'sop': fields.Float(required=True, min=1.0, max=5.0, example=4.5,
-                       description='Statement of Purpose strength (1.0-5.0)'),
-    'lor': fields.Float(required=True, min=1.0, max=5.0, example=4.0,
-                       description='Letter of Recommendation strength (1.0-5.0)'),
-    'cgpa': fields.Float(required=True, min=6.8, max=9.92, example=8.5,
-                        description='Undergraduate GPA (6.8-9.92)'),
-    'research': fields.Integer(required=True, min=0, max=1, example=1,
-                             description='Research experience (0=no, 1=yes)')
+    'gre_score': fields.Integer(
+        required=True, min=290, max=340, example=320,
+        description='GRE Score (290-340)'
+    ),
+    'toefl_score': fields.Integer(
+        required=True, min=92, max=120, example=110,
+        description='TOEFL Score (92-120)'
+    ),
+    'university_rating': fields.Integer(
+        required=True, min=1, max=5, example=3,
+        description='University Rating (1-5)'
+    ),
+    'sop': fields.Float(
+        required=True, min=1.0, max=5.0, example=4.5,
+        description='Statement of Purpose strength (1.0-5.0)'
+    ),
+    'lor': fields.Float(
+        required=True, min=1.0, max=5.0, example=4.0,
+        description='Letter of Recommendation strength (1.0-5.0)'
+    ),
+    'cgpa': fields.Float(
+        required=True, min=6.8, max=9.92, example=8.5,
+        description='Undergraduate GPA (6.8-9.92)'
+    ),
+    'research': fields.Integer(
+        required=True, min=0, max=1, example=1,
+        description='Research experience (0=no, 1=yes)'
+    )
 })
 
 prediction_response = api.model('PredictionResponse', {
     'success': fields.Boolean(example=True),
-    'prediction': fields.Float(example=0.85),
-    'recommendations': fields.List(fields.String, example=[
-        "Increase GRE by 10 points",
-        "Gain research experience"
-    ])
+    'prediction': fields.Float(
+        example=0.85,
+        description='Admission probability (0-1)'
+    ),
+    'recommendations': fields.List(
+        fields.String,
+        example=["Increase GRE by 10 points", "Gain research experience"],
+        description='List of improvement suggestions'
+    )
 })
 
 error_response = api.model('ErrorResponse', {
     'success': fields.Boolean(example=False),
-    'error': fields.String(example="Missing field: gre_score")
+    'error': fields.String(
+        example="Missing field: gre_score",
+        description='Error description'
+    )
 })
 
-# === Paths ===
+# ===== Model Loading =====
 BASE_DIR = Path(__file__).parent
 MODEL_PATH = BASE_DIR / 'models' / 'university_admission_predictor.pkl'
 
-# === Load Model ===
 try:
     model_data = joblib.load(MODEL_PATH)
     model = model_data['model']
@@ -69,12 +90,9 @@ except Exception as e:
     print(f"❌ Failed to load model: {e}")
     raise
 
-# === Helper: Validate Input ===
+# ===== Helper Functions =====
 def validate_input(data):
-    """
-    Validate incoming user data for expected range and completeness.
-    Returns cleaned and typed data or raises ValueError.
-    """
+    """Validate and sanitize input data"""
     expected_ranges = {
         'gre_score': (290, 340),
         'toefl_score': (92, 120),
@@ -95,69 +113,60 @@ def validate_input(data):
             continue
 
         try:
-            if field in ['sop', 'lor', 'cgpa']:
-                value = float(value)
-            else:
-                value = int(value)
+            cleaned[field] = float(value) if field in ['sop', 'lor', 'cgpa'] else int(value)
+            if not (min_val <= cleaned[field] <= max_val):
+                errors.append(f"{field} must be between {min_val} and {max_val}")
         except ValueError:
-            errors.append(f"{field} must be numeric.")
-            continue
-
-        if not (min_val <= value <= max_val):
-            errors.append(f"{field} must be between {min_val} and {max_val} (got {value})")
-
-        cleaned[field] = value
+            errors.append(f"{field} must be numeric")
 
     if errors:
         raise ValueError("; ".join(errors))
 
     return cleaned
 
-# === Helper: Recommendations ===
 def generate_recommendations(user_data, prediction):
-    """
-    Suggest ways to improve chances based on user input and prediction.
-    """
+    """Generate personalized improvement recommendations"""
     tips = []
-
+    
     if user_data['gre_score'] < 320:
-        tips.append(f"Increase GRE by {320 - user_data['gre_score']} points.")
+        tips.append(f"Increase GRE by {320 - user_data['gre_score']} points")
     if user_data['toefl_score'] < 105:
-        tips.append(f"Improve TOEFL by {105 - user_data['toefl_score']} points.")
+        tips.append(f"Improve TOEFL by {105 - user_data['toefl_score']} points")
     if user_data['cgpa'] < 8.5:
-        tips.append("Target CGPA above 8.5.")
+        tips.append("Target CGPA above 8.5")
     if not user_data['research'] and prediction < 0.7:
-        tips.append("Gain research experience to strengthen your profile.")
+        tips.append("Gain research experience")
 
-    return tips if tips else ["Your profile looks strong! Focus on essays and application quality."]
+    return tips if tips else ["Your profile looks strong! Focus on essays"]
 
-# === API Routes ===
+# ===== API Endpoints =====
 @api.route('/')
 class HealthCheck(Resource):
+    @api.doc(description='API health check endpoint')
     def get(self):
-        """API Health Check"""
+        """Check API status"""
         return {
-            'message': '🎓 University Admission Predictor API is running.',
-            'status': 'OK'
+            'message': '🎓 University Admission Predictor API is running',
+            'status': 'OK',
+            'version': '1.0'
         }
 
 @api.route('/predict')
 class Predictor(Resource):
+    @api.doc(description='Predict admission probability')
     @api.expect(prediction_input)
     @api.response(200, 'Success', prediction_response)
     @api.response(400, 'Bad Request', error_response)
+    @api.response(500, 'Server Error')
     def post(self):
-        """Predict admission probability"""
+        """Make admission prediction"""
         try:
-            # Read incoming JSON
             raw_data = request.get_json(force=True)
             if not raw_data:
                 return {'success': False, 'error': 'Empty request body'}, 400
 
-            print("📥 Incoming JSON:", raw_data)
-
-            # Validate and prepare input
             user_data = validate_input(raw_data)
+            
             input_values = [
                 user_data['gre_score'],
                 user_data['toefl_score'],
@@ -168,23 +177,21 @@ class Predictor(Resource):
                 user_data['research']
             ]
 
-            # Scale and predict
             input_scaled = scaler.transform([input_values])
-            prediction = model.predict(input_scaled)[0]
-
-            # Generate recommendation tips
-            recommendations = generate_recommendations(user_data, prediction)
+            prediction = round(float(model.predict(input_scaled)[0]), 4)
 
             return {
                 'success': True,
-                'prediction': round(float(prediction), 4),
-                'recommendations': recommendations
+                'prediction': prediction,
+                'recommendations': generate_recommendations(user_data, prediction)
             }
 
-        except Exception as e:
+        except ValueError as e:
             return {'success': False, 'error': str(e)}, 400
+        except Exception as e:
+            return {'success': False, 'error': f'Server error: {str(e)}'}, 500
 
-# === Entry Point ===
+# ===== Application Entry Point =====
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
