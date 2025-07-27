@@ -1,36 +1,38 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:io';
 import 'dart:async';
+import 'dart:io';
 
 class ApiService {
   static const String _baseUrl = 'https://am-i-getting-into-uni.onrender.com';
   static const String _predictEndpoint = '/predict';
-  static const Duration _timeoutDuration = Duration(seconds: 15);
+  static const Duration _timeout = Duration(seconds: 15);
 
-  static Future<Map<String, dynamic>> predictAdmission(
-      Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> predictAdmission(Map<String, dynamic> data) async {
     try {
+      final cleaned = _sanitizeInput(data);
+
       final response = await http.post(
         Uri.parse('$_baseUrl$_predictEndpoint'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: json.encode(_sanitizeInput(data)),
-      ).timeout(_timeoutDuration);
+        body: jsonEncode(cleaned),
+      ).timeout(_timeout);
 
       return _handleResponse(response);
+
     } on SocketException {
-      throw Exception('No internet connection');
+      throw const NetworkException('No internet connection.');
     } on TimeoutException {
-      throw Exception('Request timed out');
+      throw const NetworkException('Server timeout.');
     } on FormatException {
-      throw Exception('Invalid server response');
+      throw const DataException('Invalid response format.');
     } on http.ClientException catch (e) {
-      throw Exception('Connection failed: ${e.message}');
+      throw NetworkException('Client error: ${e.message}');
     } catch (e) {
-      throw Exception('Prediction failed: ${e.toString()}');
+      throw ApiException('Unexpected error: ${e.toString()}');
     }
   }
 
@@ -47,35 +49,51 @@ class ApiService {
   }
 
   static Map<String, dynamic> _handleResponse(http.Response response) {
-    final responseData = json.decode(response.body);
+    final data = jsonDecode(response.body);
 
-    if (response.statusCode == 200) {
+    if (response.statusCode == 200 && data['success'] == true) {
       return {
         'success': true,
-        'prediction': (responseData['prediction'] as num).toDouble(),
-        'recommendations': responseData['recommendations'] ?? [],
+        'prediction': (data['prediction'] as num).toDouble(),
+        'recommendations': List<String>.from(data['recommendations'] ?? []),
       };
     } else {
-      throw Exception(
-        responseData['error']?.toString() ?? 
-        'Request failed with status ${response.statusCode}',
-      );
+      throw ApiException(data['error'] ?? 'Prediction failed.', statusCode: response.statusCode);
     }
   }
 
   static int _parseInt(dynamic value) {
-    if (value == null) return 0;
+    if (value == null) throw const DataException('Missing required integer field.');
     if (value is int) return value;
-    if (value is String) return int.tryParse(value) ?? 0;
     if (value is double) return value.toInt();
-    return 0;
+    if (value is String) return int.tryParse(value) ?? (throw DataException('Invalid integer: $value'));
+    throw DataException('Invalid type for int: ${value.runtimeType}');
   }
 
   static double _parseDouble(dynamic value) {
-    if (value == null) return 0.0;
+    if (value == null) throw const DataException('Missing required number field.');
     if (value is double) return value;
-    if (value is String) return double.tryParse(value) ?? 0.0;
     if (value is int) return value.toDouble();
-    return 0.0;
+    if (value is String) return double.tryParse(value) ?? (throw DataException('Invalid number: $value'));
+    throw DataException('Invalid type for number: ${value.runtimeType}');
   }
+}
+
+// ===== Custom Exceptions =====
+class ApiException implements Exception {
+  final String message;
+  final int? statusCode;
+
+  const ApiException(this.message, {this.statusCode});
+
+  @override
+  String toString() => message;
+}
+
+class NetworkException extends ApiException {
+  const NetworkException(String msg, {int? statusCode}) : super(msg, statusCode: statusCode);
+}
+
+class DataException extends ApiException {
+  const DataException(String msg, {int? statusCode}) : super(msg, statusCode: statusCode);
 }
