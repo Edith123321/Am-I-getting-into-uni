@@ -7,10 +7,10 @@ University admissions, especially at elite institutions, are a high-stakes puzzl
 I built a linear regression model to decode the patterns behind graduate school admissions. By analyzing historical data—GRE scores, GPAs, research experience, and more.
 
 # Public API Url
-I deployed the application on Render and this is the Public [URL](https://am-i-getting-into-uni.onrender.com/)
+I deployed the application on Render and this is the Public [URL](https://am-i-getting-into-uni.onrender.com/docs/)
 
 # Youtube Demo video
-I uploaded a video showing the features of the application here is the [link]()
+I uploaded a video showing the features of the application here is the [link](https://am-i-getting-into-uni.onrender.com/docs/)
 
 # How to Run the Application
 1. Clone the application
