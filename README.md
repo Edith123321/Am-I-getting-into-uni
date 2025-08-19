@@ -10,7 +10,7 @@ I built a linear regression model to decode the patterns behind graduate school 
 I deployed the application on Render and this is the Public [URL](https://am-i-getting-into-uni.onrender.com/docs/)
 
 # Youtube Demo video
-I uploaded a video showing the features of the application here is the [link]([https://am-i-getting-into-uni.onrender.com/docs/](https://youtu.be/NvpMgcZEZy8?si=mOQthL9RwYBHQ4iw)
+I uploaded a video showing the features of the application here is the [link](https://youtu.be/NvpMgcZEZy8?si=mOQthL9RwYBHQ4iw)
 
 # How to Run the Application
 1. Clone the application
