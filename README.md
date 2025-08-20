@@ -12,6 +12,9 @@ I deployed the application on Render and this is the Public [URL](https://am-i-g
 # Youtube Demo video
 I uploaded a video showing the features of the application here is the [link](https://youtu.be/NvpMgcZEZy8?si=mOQthL9RwYBHQ4iw)
 
+# dataset link
+Please find the link to the dataset [here](https://www.kaggle.com/datasets/hrutikabadgeri/graduate-admission-predict)
+
 # How to Run the Application
 1. Clone the application
 ```bash
